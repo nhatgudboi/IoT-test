@@ -7,19 +7,30 @@ const deviceState = {
     smartLightAutoMode: true,
     aiDoorOpen: false,
     doorOpen: false,
-    buzzerOn: false,
     connected: false,
     lastAIOpen: null
+};
+
+// Face Recognition State
+const faceRecognitionState = {
+    isModelLoaded: false,
+    isCameraActive: false,
+    video: null,
+    canvas: null,
+    knownFaces: [], // Array of face descriptors
+    lastDetection: null,
+    detectionInterval: null
 };
 
 // Firebase database reference
 const dbRef = database.ref('smarthome');
 
 // Khởi tạo ứng dụng
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     initializeUI();
     startFirebaseListener();
     setupEventListeners();
+    await initializeFaceRecognition();
     addLog('Hệ thống đã khởi động', 'success');
 });
 
@@ -31,7 +42,7 @@ function initializeUI() {
     updateSmartLightDisplay(false, true);
     updateAIDisplay(false, null);
     updateDoorDisplay(false);
-    updateBuzzerDisplay(false);
+    updateAIWebDisplay('Chưa khởi động', 0);
     updateConnectionStatus(false);
 }
 
@@ -57,6 +68,14 @@ function setupEventListeners() {
     document.getElementById('test-ai-door').addEventListener('click', () => {
         testAIDoor();
     });
+
+    // Face Recognition Web Controls
+    document.getElementById('start-camera').addEventListener('click', startCamera);
+    document.getElementById('stop-camera').addEventListener('click', stopCamera);
+    document.getElementById('train-face').addEventListener('click', () => {
+        document.getElementById('face-image-input').click();
+    });
+    document.getElementById('face-image-input').addEventListener('change', handleTrainFace);
 }
 
 // Bắt đầu lắng nghe dữ liệu từ Firebase (Real-time)
@@ -126,7 +145,6 @@ function startFirebaseListener() {
             deviceState.doorOpen = isDanger; // Cửa mở khi có gas
             
             updateAlertLedDisplay(deviceState.alertLedOn);
-            updateBuzzerDisplay(deviceState.buzzerOn);
             updateDoorDisplay(deviceState.doorOpen);
         }
     });
@@ -274,19 +292,239 @@ function updateDoorDisplay(isOpen) {
     }
 }
 
-// Cập nhật hiển thị còi
-function updateBuzzerDisplay(isOn) {
-    const buzzerStatusEl = document.getElementById('buzzer-status');
-    const buzzerIconEl = document.getElementById('buzzer-icon');
+// ========== FACE RECOGNITION WEB FUNCTIONS ==========
 
-    if (isOn) {
-        buzzerStatusEl.textContent = 'Đang bật';
-        buzzerStatusEl.className = 'card-status danger';
-        buzzerIconEl.classList.add('active');
+// Khởi tạo Face Recognition
+async function initializeFaceRecognition() {
+    try {
+        addLog('Đang tải Face Recognition models...', '');
+        
+        // Load face-api models từ CDN
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        
+        faceRecognitionState.isModelLoaded = true;
+        faceRecognitionState.video = document.getElementById('video');
+        faceRecognitionState.canvas = document.getElementById('canvas');
+        
+        updateAIWebDisplay('Sẵn sàng', faceRecognitionState.knownFaces.length);
+        addLog('✅ Face Recognition models đã tải xong', 'success');
+    } catch (error) {
+        console.error('Lỗi load Face Recognition models:', error);
+        addLog('❌ Lỗi tải Face Recognition models', 'error');
+    }
+}
+
+// Bật camera
+async function startCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                width: 640, 
+                height: 480,
+                facingMode: 'user' // Front camera
+            } 
+        });
+        
+        faceRecognitionState.video.srcObject = stream;
+        faceRecognitionState.isCameraActive = true;
+        
+        document.getElementById('start-camera').style.display = 'none';
+        document.getElementById('stop-camera').style.display = 'inline-block';
+        
+        updateAIWebDisplay('Đang quét...', faceRecognitionState.knownFaces.length);
+        addLog('📷 Camera đã bật', 'success');
+        
+        // Bắt đầu detect faces
+        startFaceDetection();
+    } catch (error) {
+        console.error('Lỗi bật camera:', error);
+        addLog('❌ Không thể bật camera. Vui lòng cho phép truy cập camera.', 'error');
+    }
+}
+
+// Tắt camera
+function stopCamera() {
+    if (faceRecognitionState.video.srcObject) {
+        const tracks = faceRecognitionState.video.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        faceRecognitionState.video.srcObject = null;
+    }
+    
+    faceRecognitionState.isCameraActive = false;
+    
+    if (faceRecognitionState.detectionInterval) {
+        clearInterval(faceRecognitionState.detectionInterval);
+        faceRecognitionState.detectionInterval = null;
+    }
+    
+    // Clear canvas
+    const ctx = faceRecognitionState.canvas.getContext('2d');
+    ctx.clearRect(0, 0, faceRecognitionState.canvas.width, faceRecognitionState.canvas.height);
+    
+    document.getElementById('start-camera').style.display = 'inline-block';
+    document.getElementById('stop-camera').style.display = 'none';
+    
+    updateAIWebDisplay('Đã tắt', faceRecognitionState.knownFaces.length);
+    addLog('📷 Camera đã tắt', '');
+}
+
+// Bắt đầu detect faces
+function startFaceDetection() {
+    if (!faceRecognitionState.isModelLoaded || !faceRecognitionState.isCameraActive) return;
+    
+    faceRecognitionState.detectionInterval = setInterval(async () => {
+        await detectFaces();
+    }, 500); // Detect mỗi 500ms
+}
+
+// Detect và nhận diện khuôn mặt
+async function detectFaces() {
+    if (!faceRecognitionState.video || !faceRecognitionState.isModelLoaded) return;
+    
+    const video = faceRecognitionState.video;
+    const canvas = faceRecognitionState.canvas;
+    
+    // Set canvas size
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Detect faces
+    const detections = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+    
+    if (detections.length === 0) {
+        return;
+    }
+    
+    // Draw boxes và check recognition
+    detections.forEach(async (detection) => {
+        const box = detection.detection.box;
+        
+        // Check if face is recognized
+        if (faceRecognitionState.knownFaces.length > 0) {
+            const faceMatcher = new faceapi.FaceMatcher(faceRecognitionState.knownFaces);
+            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+            
+            // Draw box
+            ctx.strokeStyle = bestMatch.label !== 'unknown' ? '#10b981' : '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            
+            // Draw label
+            ctx.fillStyle = bestMatch.label !== 'unknown' ? '#10b981' : '#ef4444';
+            ctx.fillRect(box.x, box.y - 25, box.width, 25);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(
+                bestMatch.label !== 'unknown' ? `✅ ${bestMatch.label}` : '❌ Unknown',
+                box.x + 5,
+                box.y - 5
+            );
+            
+            // Nếu nhận diện được và chưa gửi lệnh gần đây
+            if (bestMatch.label !== 'unknown' && bestMatch.distance < 0.6) {
+                const now = Date.now();
+                if (!faceRecognitionState.lastDetection || (now - faceRecognitionState.lastDetection) > 5000) {
+                    faceRecognitionState.lastDetection = now;
+                    await unlockDoor();
+                }
+            }
+        } else {
+            // Chưa có face nào được train
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(box.x, box.y - 25, box.width, 25);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText('⚠️ Chưa train', box.x + 5, box.y - 5);
+        }
+    });
+}
+
+// Train khuôn mặt từ ảnh
+async function handleTrainFace(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    try {
+        addLog('Đang train khuôn mặt...', '');
+        
+        const image = await faceapi.bufferToImage(file);
+        const detection = await faceapi
+            .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+        
+        if (!detection) {
+            addLog('❌ Không tìm thấy khuôn mặt trong ảnh', 'error');
+            return;
+        }
+        
+        // Lấy tên từ file hoặc prompt
+        const name = prompt('Nhập tên cho khuôn mặt này:', 'Admin');
+        if (!name) return;
+        
+        const labeledFaceDescriptor = new faceapi.LabeledFaceDescriptors(name, [detection.descriptor]);
+        faceRecognitionState.knownFaces.push(labeledFaceDescriptor);
+        
+        updateAIWebDisplay('Đã train', faceRecognitionState.knownFaces.length);
+        addLog(`✅ Đã train khuôn mặt: ${name}`, 'success');
+        
+        // Reset input
+        event.target.value = '';
+    } catch (error) {
+        console.error('Lỗi train face:', error);
+        addLog('❌ Lỗi train khuôn mặt', 'error');
+    }
+}
+
+// Mở cửa khi nhận diện được
+async function unlockDoor() {
+    try {
+        await database.ref('smarthome/commands/ai_door').set(true);
+        addLog('🔓 Đã nhận diện khuôn mặt! Đang mở cửa...', 'success');
+        updateAIWebDisplay('Đã nhận diện!', faceRecognitionState.knownFaces.length);
+        
+        // Reset sau 5 giây
+        setTimeout(async () => {
+            try {
+                await database.ref('smarthome/commands/ai_door').set(false);
+            } catch (error) {
+                console.error('Lỗi reset AI door:', error);
+            }
+        }, 5000);
+    } catch (error) {
+        console.error('Lỗi unlock door:', error);
+        addLog('❌ Lỗi khi mở cửa', 'error');
+    }
+}
+
+// Cập nhật hiển thị AI Web
+function updateAIWebDisplay(status, trainedCount) {
+    const statusEl = document.getElementById('ai-web-status');
+    const statusTextEl = document.getElementById('face-recognition-status');
+    const countEl = document.getElementById('trained-faces-count');
+    
+    statusEl.textContent = status;
+    statusTextEl.textContent = status;
+    countEl.textContent = trainedCount;
+    
+    if (status.includes('Đã nhận diện')) {
+        statusEl.className = 'card-status active';
+    } else if (status.includes('Đang quét')) {
+        statusEl.className = 'card-status warning';
     } else {
-        buzzerStatusEl.textContent = 'Tắt';
-        buzzerStatusEl.className = 'card-status';
-        buzzerIconEl.classList.remove('active');
+        statusEl.className = 'card-status';
     }
 }
 

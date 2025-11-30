@@ -10,6 +10,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     
+    <!-- Face API.js for face recognition -->
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.14/dist/face-api.min.js"></script>
+    
     <script>
         // Cấu hình Firebase
         const firebaseConfig = {
@@ -195,21 +198,39 @@
                 </div>
             </div>
 
-            <!-- Buzzer Card -->
-            <div class="card buzzer-card">
+            <!-- AI Face Unlock Web Card -->
+            <div class="card ai-face-web-card">
                 <div class="card-header">
-                    <h2>🔊 Còi Báo Động</h2>
-                    <span class="card-status" id="buzzer-status">Tắt</span>
+                    <h2>📷 AI Face Unlock (Web)</h2>
+                    <span class="card-status" id="ai-web-status">Sẵn sàng</span>
                 </div>
                 <div class="card-body">
-                    <div class="control-section">
-                        <div class="device-icon" id="buzzer-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M9 18V5l12-2v13M9 18c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zm12-3c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zM9 12l12-2"/>
-                            </svg>
+                    <div class="face-recognition-section">
+                        <!-- Video Preview -->
+                        <div class="video-container">
+                            <video id="video" autoplay playsinline></video>
+                            <canvas id="canvas"></canvas>
+                            <div class="face-overlay" id="face-overlay"></div>
                         </div>
-                        <div class="info-text">
-                            <p>Tự động kêu khi phát hiện khí gas nguy hiểm</p>
+                        
+                        <!-- Controls -->
+                        <div class="face-controls">
+                            <button class="btn btn-start" id="start-camera">Bật Camera</button>
+                            <button class="btn btn-stop" id="stop-camera" style="display: none;">Tắt Camera</button>
+                            <button class="btn btn-train" id="train-face">Train Khuôn Mặt</button>
+                            <input type="file" id="face-image-input" accept="image/*" style="display: none;">
+                        </div>
+                        
+                        <!-- Status Info -->
+                        <div class="face-status-info">
+                            <div class="status-item">
+                                <span>Trạng thái:</span>
+                                <span id="face-recognition-status">Chưa khởi động</span>
+                            </div>
+                            <div class="status-item">
+                                <span>Khuôn mặt đã train:</span>
+                                <span id="trained-faces-count">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
