@@ -83,30 +83,89 @@ function setupEventListeners() {
         document.getElementById('face-image-input').click();
     });
     document.getElementById('face-image-input').addEventListener('change', handleTrainFace);
+    
+    // Clear logs button
+    document.getElementById('clear-logs').addEventListener('click', () => {
+        const logContainer = document.getElementById('log-container');
+        logContainer.innerHTML = '<div class="log-item success">Nhật ký đã được xóa</div>';
+        addLog('Nhật ký đã được xóa', '');
+    });
 }
 
 // Bắt đầu lắng nghe dữ liệu từ Firebase (Real-time)
+let lastDataTimestamp = 0;
+let connectionCheckInterval = null;
+const DATA_TIMEOUT = 3000; // 3 giây không có dữ liệu mới = mất kết nối (giảm từ 5s)
+
 function startFirebaseListener() {
-    // Lắng nghe dữ liệu cảm biến
+    // Kiểm tra kết nối Firebase trước
+    checkFirebaseConnection();
+    
+    // Kiểm tra timeout định kỳ (mỗi 500ms để phản hồi cực nhanh)
+    if (connectionCheckInterval) {
+        clearInterval(connectionCheckInterval);
+    }
+    
+    connectionCheckInterval = setInterval(() => {
+        const now = Date.now();
+        if (lastDataTimestamp > 0 && (now - lastDataTimestamp) > DATA_TIMEOUT) {
+            updateConnectionStatus(false);
+            deviceState.connected = false;
+            lastDataTimestamp = 0; // Reset để tránh spam log
+        }
+    }, 500); // Kiểm tra mỗi 500ms để phản hồi nhanh
+    
+    // Kiểm tra dữ liệu ngay khi load trang (không đợi)
+    dbRef.child('data').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data && (data.gas !== undefined || data.light_sensor !== undefined)) {
+            lastDataTimestamp = Date.now();
+            updateConnectionStatus(true);
+            deviceState.connected = true;
+            
+            // Cập nhật dữ liệu ngay
+            deviceState.gasValue = data.gas || 0;
+            deviceState.lightSensor = data.light_sensor || 0;
+            updateGasDisplay(deviceState.gasValue);
+            updateLightSensorDisplay(deviceState.lightSensor);
+        } else {
+            updateConnectionStatus(false);
+            deviceState.connected = false;
+        }
+    }).catch((error) => {
+        console.error('Lỗi kiểm tra dữ liệu ban đầu:', error);
+        updateConnectionStatus(false);
+        deviceState.connected = false;
+    });
+    
+    // Lắng nghe real-time để cập nhật ngay khi có thay đổi
     dbRef.child('data').on('value', (snapshot) => {
         const data = snapshot.val();
         
-        if (data) {
+        if (data && (data.gas !== undefined || data.light_sensor !== undefined)) {
+            // Cập nhật timestamp ngay khi nhận được dữ liệu hợp lệ
+            lastDataTimestamp = Date.now();
+            
             deviceState.gasValue = data.gas || 0;
             deviceState.lightSensor = data.light_sensor || 0;
             deviceState.connected = true;
 
-            // Cập nhật giao diện
+            // Cập nhật giao diện ngay lập tức
             updateGasDisplay(deviceState.gasValue);
             updateLightSensorDisplay(deviceState.lightSensor);
             updateConnectionStatus(true);
         } else {
-            updateConnectionStatus(false);
-            addLog('Chưa có dữ liệu từ ESP32', 'warning');
+            // Không có dữ liệu hợp lệ
+            // Chỉ set offline nếu đã từng có dữ liệu trước đó
+            if (lastDataTimestamp > 0) {
+                updateConnectionStatus(false);
+                deviceState.connected = false;
+            }
         }
     }, (error) => {
         console.error('Lỗi Firebase:', error);
         updateConnectionStatus(false);
+        deviceState.connected = false;
         addLog('Lỗi kết nối Firebase: ' + error.message, 'error');
     });
 
@@ -148,13 +207,33 @@ function startFirebaseListener() {
             
             // Cập nhật trạng thái báo động
             deviceState.alertLedOn = isDanger;
-            deviceState.buzzerOn = isDanger;
             deviceState.doorOpen = isDanger; // Cửa mở khi có gas
             
             updateAlertLedDisplay(deviceState.alertLedOn);
             updateDoorDisplay(deviceState.doorOpen);
         }
     });
+}
+
+// Kiểm tra kết nối Firebase
+function checkFirebaseConnection() {
+    try {
+        const connectedRef = database.ref('.info/connected');
+        connectedRef.on('value', (snapshot) => {
+            const isConnected = snapshot.val();
+            if (!isConnected) {
+                updateConnectionStatus(false);
+                deviceState.connected = false;
+                addLog('⚠️ Mất kết nối với Firebase', 'error');
+            }
+            // Nếu Firebase connected nhưng chưa có dữ liệu từ ESP32,
+            // trạng thái sẽ được cập nhật bởi startFirebaseListener()
+        });
+    } catch (error) {
+        console.error('Lỗi kiểm tra Firebase connection:', error);
+        updateConnectionStatus(false);
+        deviceState.connected = false;
+    }
 }
 
 // Cập nhật hiển thị cảm biến gas

@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🏠 SmartHome Dashboard - ESP32</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="styles.css">
     
     <!-- Firebase SDK -->
@@ -33,7 +39,10 @@
 <body>
     <div class="container">
         <header>
-            <h1>🏠 SmartHome Dashboard</h1>
+            <div class="header-content">
+                <h1>🏠 SmartHome Dashboard</h1>
+                <p class="header-subtitle">Intelligent Home Automation System</p>
+            </div>
             <div class="status-indicator">
                 <span id="connection-status" class="status-dot offline"></span>
                 <span id="connection-text">Đang kết nối...</span>
@@ -215,13 +224,11 @@
                         
                         <!-- Controls -->
                         <div class="face-controls">
-                            <button class="btn btn-start" id="start-camera">Bật Camera</button>
-                            <button class="btn btn-stop" id="stop-camera" style="display: none;">Tắt Camera</button>
-                            <button class="btn btn-train" id="train-face">Train Khuôn Mặt</button>
+                            <button class="btn btn-start" id="start-camera">📷 Bật Camera</button>
+                            <button class="btn btn-stop" id="stop-camera" style="display: none;">⏹️ Tắt Camera</button>
+                            <button class="btn btn-train" id="train-face">🎓 Train Khuôn Mặt</button>
                             <input type="file" id="face-image-input" accept="image/*" multiple style="display: none;">
-                            <small style="display: block; margin-top: 5px; color: #6b7280; font-size: 0.85rem;">
-                                💡 Có thể chọn nhiều ảnh cùng lúc để tăng độ chính xác
-                            </small>
+                            <small>💡 Có thể chọn nhiều ảnh cùng lúc để tăng độ chính xác</small>
                         </div>
                         
                         <!-- Status Info -->
@@ -250,9 +257,12 @@
 
         <!-- Log Section -->
         <div class="log-section">
-            <h3>📋 Nhật Ký Hoạt Động</h3>
+            <div class="log-header">
+                <h3>📋 Nhật Ký Hoạt Động</h3>
+                <button class="btn-clear-logs" id="clear-logs" title="Xóa nhật ký">🗑️</button>
+            </div>
             <div class="log-container" id="log-container">
-                <div class="log-item">Hệ thống đã khởi động...</div>
+                <div class="log-item success">Hệ thống đã khởi động...</div>
             </div>
         </div>
     </div>
