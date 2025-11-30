@@ -218,7 +218,10 @@
                             <button class="btn btn-start" id="start-camera">Bật Camera</button>
                             <button class="btn btn-stop" id="stop-camera" style="display: none;">Tắt Camera</button>
                             <button class="btn btn-train" id="train-face">Train Khuôn Mặt</button>
-                            <input type="file" id="face-image-input" accept="image/*" style="display: none;">
+                            <input type="file" id="face-image-input" accept="image/*" multiple style="display: none;">
+                            <small style="display: block; margin-top: 5px; color: #6b7280; font-size: 0.85rem;">
+                                💡 Có thể chọn nhiều ảnh cùng lúc để tăng độ chính xác
+                            </small>
                         </div>
                         
                         <!-- Status Info -->
@@ -230,6 +233,14 @@
                             <div class="status-item">
                                 <span>Khuôn mặt đã train:</span>
                                 <span id="trained-faces-count">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span>Tiến trình nhận diện:</span>
+                                <span id="matches-progress">0/8</span>
+                            </div>
+                            <div class="status-item">
+                                <span>Tham số:</span>
+                                <span style="font-size: 0.8rem;">Tolerance: 0.35 | Distance: 0.35</span>
                             </div>
                         </div>
                     </div>

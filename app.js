@@ -19,8 +19,15 @@ const faceRecognitionState = {
     canvas: null,
     knownFaces: [], // Array of face descriptors
     lastDetection: null,
-    detectionInterval: null
+    detectionInterval: null,
+    consecutiveMatches: 0, // Đếm số frame nhận diện đúng liên tiếp
+    lastMatchTime: 0
 };
+
+// Tham số độ chính xác (đồng bộ với Python)
+const FACE_TOLERANCE = 0.35; // Giảm từ 0.5 xuống 0.35 để nghiêm ngặt hơn
+const FACE_DISTANCE_THRESHOLD = 0.35; // Ngưỡng khoảng cách tối đa
+const REQUIRED_CONSECUTIVE_MATCHES = 8; // Phải nhận diện đúng 8 frame liên tiếp mới mở cửa
 
 // Firebase database reference
 const dbRef = database.ref('smarthome');
@@ -360,6 +367,9 @@ function stopCamera() {
         faceRecognitionState.detectionInterval = null;
     }
     
+    // Reset counter khi tắt camera
+    faceRecognitionState.consecutiveMatches = 0;
+    
     // Clear canvas
     const ctx = faceRecognitionState.canvas.getContext('2d');
     ctx.clearRect(0, 0, faceRecognitionState.canvas.width, faceRecognitionState.canvas.height);
@@ -405,37 +415,56 @@ async function detectFaces() {
     }
     
     // Draw boxes và check recognition
-    detections.forEach(async (detection) => {
+    let currentFrameHasMatch = false;
+    
+    // Xử lý từng detection (không dùng async trong forEach)
+    for (const detection of detections) {
         const box = detection.detection.box;
         
         // Check if face is recognized
         if (faceRecognitionState.knownFaces.length > 0) {
-            const faceMatcher = new faceapi.FaceMatcher(faceRecognitionState.knownFaces);
+            const faceMatcher = new faceapi.FaceMatcher(faceRecognitionState.knownFaces, FACE_TOLERANCE);
             const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
             
-            // Draw box
-            ctx.strokeStyle = bestMatch.label !== 'unknown' ? '#10b981' : '#ef4444';
-            ctx.lineWidth = 3;
+            // Tính confidence (1 - distance)
+            const confidence = 1 - bestMatch.distance;
+            
+            // CHỈ NHẬN DIỆN NẾU:
+            // 1. Match label !== 'unknown' (tolerance check)
+            // 2. Distance < threshold (nghiêm ngặt hơn)
+            const isRecognized = bestMatch.label !== 'unknown' && bestMatch.distance < FACE_DISTANCE_THRESHOLD;
+            
+            // Draw box với màu dựa trên độ chính xác
+            ctx.strokeStyle = isRecognized ? '#10b981' : '#ef4444';
+            ctx.lineWidth = isRecognized ? 3 : 2;
             ctx.strokeRect(box.x, box.y, box.width, box.height);
             
-            // Draw label
-            ctx.fillStyle = bestMatch.label !== 'unknown' ? '#10b981' : '#ef4444';
-            ctx.fillRect(box.x, box.y - 25, box.width, 25);
+            // Draw label với confidence
+            ctx.fillStyle = isRecognized ? '#10b981' : '#ef4444';
+            ctx.fillRect(box.x, box.y - 50, box.width, 50);
             ctx.fillStyle = 'white';
-            ctx.font = '16px Arial';
-            ctx.fillText(
-                bestMatch.label !== 'unknown' ? `✅ ${bestMatch.label}` : '❌ Unknown',
-                box.x + 5,
-                box.y - 5
-            );
+            ctx.font = '14px Arial';
             
-            // Nếu nhận diện được và chưa gửi lệnh gần đây
-            if (bestMatch.label !== 'unknown' && bestMatch.distance < 0.6) {
-                const now = Date.now();
-                if (!faceRecognitionState.lastDetection || (now - faceRecognitionState.lastDetection) > 5000) {
-                    faceRecognitionState.lastDetection = now;
-                    await unlockDoor();
-                }
+            if (isRecognized) {
+                ctx.fillText(
+                    `✅ ${bestMatch.label} (${Math.round(confidence * 100)}%)`,
+                    box.x + 5,
+                    box.y - 30
+                );
+                // Hiển thị tiến trình (sẽ cập nhật sau khi đếm)
+                const nextMatchCount = faceRecognitionState.consecutiveMatches + 1;
+                ctx.fillText(
+                    `${nextMatchCount}/${REQUIRED_CONSECUTIVE_MATCHES}`,
+                    box.x + 5,
+                    box.y - 10
+                );
+                currentFrameHasMatch = true;
+            } else {
+                ctx.fillText(
+                    `❌ Unknown (${Math.round(confidence * 100)}%)`,
+                    box.x + 5,
+                    box.y - 25
+                );
             }
         } else {
             // Chưa có face nào được train
@@ -448,37 +477,89 @@ async function detectFaces() {
             ctx.font = '16px Arial';
             ctx.fillText('⚠️ Chưa train', box.x + 5, box.y - 5);
         }
-    });
+    }
+    
+    // Xử lý logic đếm frame liên tiếp (đồng bộ với Python)
+    if (currentFrameHasMatch) {
+        faceRecognitionState.consecutiveMatches++;
+        faceRecognitionState.lastMatchTime = Date.now();
+        
+        if (faceRecognitionState.consecutiveMatches >= REQUIRED_CONSECUTIVE_MATCHES) {
+            // Đã nhận diện đúng đủ số frame liên tiếp
+            const now = Date.now();
+            if (!faceRecognitionState.lastDetection || (now - faceRecognitionState.lastDetection) > 5000) {
+                faceRecognitionState.lastDetection = now;
+                faceRecognitionState.consecutiveMatches = 0; // Reset trước khi mở cửa
+                await unlockDoor();
+            }
+        } else {
+            // Đang đếm frame, cập nhật UI
+            updateAIWebDisplay(`Đang xác nhận... (${faceRecognitionState.consecutiveMatches}/${REQUIRED_CONSECUTIVE_MATCHES})`, faceRecognitionState.knownFaces.length);
+        }
+    } else {
+        // Không có match trong frame này, reset counter (giống Python)
+        if (faceRecognitionState.consecutiveMatches > 0) {
+            faceRecognitionState.consecutiveMatches = 0;
+            updateAIWebDisplay('Đang quét...', faceRecognitionState.knownFaces.length);
+        }
+    }
 }
 
-// Train khuôn mặt từ ảnh
+// Train khuôn mặt từ ảnh (hỗ trợ train nhiều ảnh như Python)
 async function handleTrainFace(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
     
     try {
-        addLog('Đang train khuôn mặt...', '');
-        
-        const image = await faceapi.bufferToImage(file);
-        const detection = await faceapi
-            .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor();
-        
-        if (!detection) {
-            addLog('❌ Không tìm thấy khuôn mặt trong ảnh', 'error');
+        const name = prompt('Nhập tên cho khuôn mặt này:', 'Admin');
+        if (!name) {
+            event.target.value = '';
             return;
         }
         
-        // Lấy tên từ file hoặc prompt
-        const name = prompt('Nhập tên cho khuôn mặt này:', 'Admin');
-        if (!name) return;
+        addLog(`Đang train ${files.length} ảnh cho ${name}...`, '');
         
-        const labeledFaceDescriptor = new faceapi.LabeledFaceDescriptors(name, [detection.descriptor]);
-        faceRecognitionState.knownFaces.push(labeledFaceDescriptor);
+        let successCount = 0;
+        const descriptors = [];
         
-        updateAIWebDisplay('Đã train', faceRecognitionState.knownFaces.length);
-        addLog(`✅ Đã train khuôn mặt: ${name}`, 'success');
+        // Xử lý từng file (hỗ trợ chọn nhiều ảnh)
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            try {
+                const image = await faceapi.bufferToImage(file);
+                const detections = await faceapi
+                    .detectAllFaces(image, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptors();
+                
+                if (detections.length === 0) {
+                    addLog(`⚠️ Không tìm thấy khuôn mặt trong ${file.name}`, 'warning');
+                    continue;
+                }
+                
+                // Thêm tất cả khuôn mặt tìm được (giống Python)
+                detections.forEach(detection => {
+                    descriptors.push(detection.descriptor);
+                    successCount++;
+                });
+                
+                addLog(`✓ Đã load: ${file.name} (${detections.length} khuôn mặt)`, 'success');
+            } catch (error) {
+                console.error(`Lỗi khi xử lý ${file.name}:`, error);
+                addLog(`✗ Lỗi khi load ${file.name}`, 'error');
+            }
+        }
+        
+        if (descriptors.length > 0) {
+            // Tạo LabeledFaceDescriptors với tất cả descriptors (giống Python)
+            const labeledFaceDescriptor = new faceapi.LabeledFaceDescriptors(name, descriptors);
+            faceRecognitionState.knownFaces.push(labeledFaceDescriptor);
+            
+            updateAIWebDisplay('Đã train', faceRecognitionState.knownFaces.length);
+            addLog(`✅ Đã train ${successCount} khuôn mặt cho ${name}`, 'success');
+        } else {
+            addLog('❌ Không có khuôn mặt nào được train', 'error');
+        }
         
         // Reset input
         event.target.value = '';
@@ -488,17 +569,18 @@ async function handleTrainFace(event) {
     }
 }
 
-// Mở cửa khi nhận diện được
+// Mở cửa khi nhận diện được (đồng bộ với Python)
 async function unlockDoor() {
     try {
         await database.ref('smarthome/commands/ai_door').set(true);
-        addLog('🔓 Đã nhận diện khuôn mặt! Đang mở cửa...', 'success');
+        addLog(`✅ XÁC NHẬN! ${REQUIRED_CONSECUTIVE_MATCHES} frame liên tiếp - CHÀO MỪNG ADMIN!`, 'success');
         updateAIWebDisplay('Đã nhận diện!', faceRecognitionState.knownFaces.length);
         
-        // Reset sau 5 giây
+        // Reset sau 5 giây (giống Python)
         setTimeout(async () => {
             try {
                 await database.ref('smarthome/commands/ai_door').set(false);
+                addLog('Reset trạng thái mở cửa. Sẵn sàng nhận diện lần tiếp theo.', '');
             } catch (error) {
                 console.error('Lỗi reset AI door:', error);
             }
@@ -509,19 +591,31 @@ async function unlockDoor() {
     }
 }
 
-// Cập nhật hiển thị AI Web
+// Cập nhật hiển thị AI Web (đồng bộ với Python)
 function updateAIWebDisplay(status, trainedCount) {
     const statusEl = document.getElementById('ai-web-status');
     const statusTextEl = document.getElementById('face-recognition-status');
     const countEl = document.getElementById('trained-faces-count');
+    const progressEl = document.getElementById('matches-progress');
     
     statusEl.textContent = status;
     statusTextEl.textContent = status;
-    countEl.textContent = trainedCount;
+    
+    // Đếm tổng số descriptors (giống Python)
+    let totalDescriptors = 0;
+    faceRecognitionState.knownFaces.forEach(face => {
+        totalDescriptors += face.descriptors.length;
+    });
+    countEl.textContent = totalDescriptors || trainedCount;
+    
+    // Cập nhật tiến trình nhận diện
+    if (progressEl) {
+        progressEl.textContent = `${faceRecognitionState.consecutiveMatches}/${REQUIRED_CONSECUTIVE_MATCHES}`;
+    }
     
     if (status.includes('Đã nhận diện')) {
         statusEl.className = 'card-status active';
-    } else if (status.includes('Đang quét')) {
+    } else if (status.includes('Đang quét') || status.includes('Đang xác nhận')) {
         statusEl.className = 'card-status warning';
     } else {
         statusEl.className = 'card-status';
