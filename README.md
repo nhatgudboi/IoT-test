@@ -1,254 +1,385 @@
-# 🏠 IoT SmartHome System với ESP32
+# 🏠 SmartHome IoT Dashboard - ESP32
 
-Hệ thống SmartHome IoT hiện đại sử dụng ESP32 để điều khiển và giám sát:
-- 🔍 Cảm biến khí gas (MQ-2 hoặc tương tự)
-- 🔊 Còi báo động
-- 💡 Đèn LED với điều chỉnh độ sáng
+Hệ thống tự động hóa nhà thông minh sử dụng ESP32, tích hợp cảm biến khí gas, cảm biến ánh sáng, điều khiển đèn thông minh, và nhận diện khuôn mặt AI để mở cửa tự động.
 
-## 📋 Mục Lục
+## 📋 Mục lục
 
+- [Tổng quan](#tổng-quan)
 - [Tính năng](#tính-năng)
-- [Yêu cầu phần cứng](#yêu-cầu-phần-cứng)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
 - [Cài đặt](#cài-đặt)
-- [Sử dụng](#sử-dụng)
 - [Cấu hình](#cấu-hình)
-- [API Endpoints](#api-endpoints)
+- [Sử dụng](#sử-dụng)
+- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
+- [Sơ đồ kết nối phần cứng](#sơ-đồ-kết-nối-phần-cứng)
+- [Troubleshooting](#troubleshooting)
+
+## 🎯 Tổng quan
+
+Dự án SmartHome IoT là một hệ thống tự động hóa nhà thông minh hoàn chỉnh, bao gồm:
+
+- **ESP32 Microcontroller**: Xử lý cảm biến và điều khiển thiết bị
+- **Web Dashboard**: Giao diện web real-time để theo dõi và điều khiển
+- **Firebase Realtime Database**: Đồng bộ dữ liệu giữa ESP32 và web
+- **AI Face Recognition**: Nhận diện khuôn mặt để mở cửa tự động (Python + Web)
 
 ## ✨ Tính năng
 
-- **Giao diện web hiện đại**: UI đẹp, responsive, dễ sử dụng
-- **Giám sát real-time**: Cập nhật dữ liệu cảm biến mỗi giây
-- **Tự động hóa thông minh**: 
-  - Tự động bật còi khi phát hiện gas nguy hiểm
-  - Tự động bật đèn khi mức gas quá cao
-- **Điều khiển từ xa**: Bật/tắt còi và đèn qua web
-- **Điều chỉnh độ sáng**: Điều khiển độ sáng đèn từ 0-100%
-- **Nhật ký hoạt động**: Theo dõi tất cả các sự kiện trong hệ thống
+### 🔥 An toàn & Báo động
+- **Cảm biến khí gas**: Phát hiện khí gas độc hại với ngưỡng cảnh báo
+- **Tự động mở cửa sổ**: Khi phát hiện gas, hệ thống tự động mở cửa sổ và cửa chính để thoát khí
+- **Còi báo động**: Cảnh báo âm thanh khi phát hiện gas
+- **Đèn LED báo động**: Nhấp nháy khi có nguy hiểm
 
-## 🔧 Yêu cầu Phần cứng
+### 💡 Đèn thông minh
+- **Cảm biến ánh sáng**: Tự động phát hiện độ sáng môi trường
+- **Chế độ tự động**: Tự động bật/tắt đèn dựa trên cảm biến ánh sáng
+- **Chế độ thủ công**: Điều khiển đèn từ web dashboard
+- **Đồng bộ real-time**: Trạng thái đèn được cập nhật ngay lập tức
 
-### ESP32
-- ESP32 Development Board (ESP32-WROOM-32 hoặc tương tự)
+### 🤖 AI Face Recognition
+- **Nhận diện khuôn mặt (Python)**: Sử dụng webcam để nhận diện và mở cửa tự động
+- **Nhận diện khuôn mặt (Web)**: Sử dụng camera trình duyệt để nhận diện trực tiếp trên web
+- **Độ chính xác cao**: Yêu cầu 8 frame liên tiếp nhận diện đúng mới mở cửa
+- **Train nhiều ảnh**: Hỗ trợ train nhiều ảnh để tăng độ chính xác
+- **Tự động mở/đóng cửa**: Mở cửa 5 giây sau khi nhận diện thành công
 
-### Cảm biến và thiết bị
-- **Cảm biến khí gas**: MQ-2, MQ-5, hoặc tương tự
-- **Còi**: Buzzer 5V hoặc 3.3V
-- **Đèn**: LED với điện trở 220Ω hoặc module LED PWM
+### 📊 Web Dashboard
+- **Real-time monitoring**: Theo dõi trạng thái thiết bị theo thời gian thực
+- **Giao diện hiện đại**: Thiết kế glassmorphism, responsive, đẹp mắt
+- **Nhật ký hoạt động**: Ghi lại tất cả các sự kiện quan trọng
+- **Trạng thái kết nối**: Hiển thị trạng thái kết nối với ESP32
 
-### Kết nối
-- Kết nối WiFi để ESP32 có thể truy cập internet
+## 📁 Cấu trúc dự án
 
-## 📦 Cài đặt
+```
+WebIoT/
+├── index.html              # Giao diện web dashboard
+├── styles.css              # Styling cho web dashboard
+├── app.js                  # Logic JavaScript cho web dashboard
+├── esp32_smarthome.ino     # Code Arduino cho ESP32
+├── nhandienkhuonmat.py     # Script Python nhận diện khuôn mặt
+├── smarthome-iot-2d485-firebase-adminsdk-fbsvc-2562115f7a.json  # Firebase Admin SDK key
+└── README.md               # Tài liệu dự án
+```
+
+## 🔧 Yêu cầu hệ thống
+
+### Phần cứng
+- **ESP32 Development Board** (ESP32-WROOM-32 hoặc tương đương)
+- **Cảm biến khí gas MQ-2** (kết nối với GPIO 34)
+- **Cảm biến ánh sáng** (Digital Output, kết nối với GPIO 35)
+- **Servo Motor** x3 (Cửa chính GPIO 13, Cửa sổ 1 GPIO 25, Cửa sổ 2 GPIO 26)
+- **Buzzer** (GPIO 12)
+- **LED** x2 (Đèn báo động GPIO 14, Đèn thông minh GPIO 27)
+- **Webcam** (cho Python face recognition)
+- **Dây nối và breadboard**
+
+### Phần mềm
+- **Arduino IDE** (v1.8.x hoặc v2.x)
+- **Python** 3.7+
+- **Trình duyệt web** hiện đại (Chrome, Firefox, Edge)
+- **Firebase Account** (miễn phí)
+
+### Thư viện Arduino
+- `WiFi.h` (built-in)
+- `FirebaseESP32` (cài từ Library Manager)
+- `ESP32Servo` (cài từ Library Manager)
+
+### Thư viện Python
+- `opencv-python`
+- `face-recognition`
+- `firebase-admin`
+- `numpy`
+
+## 🚀 Cài đặt
 
 ### 1. Cài đặt ESP32
 
-1. **Cài đặt Arduino IDE** (nếu chưa có)
-   - Tải từ: https://www.arduino.cc/en/software
+#### Bước 1: Cài đặt Arduino IDE và ESP32 Board
+1. Tải và cài đặt [Arduino IDE](https://www.arduino.cc/en/software)
+2. Mở Arduino IDE → File → Preferences
+3. Thêm URL vào "Additional Board Manager URLs":
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+4. Tools → Board → Boards Manager → Tìm "ESP32" → Install
 
-2. **Thêm ESP32 Board vào Arduino IDE**
-   - Mở Arduino IDE
-   - Vào `File` → `Preferences`
-   - Thêm URL vào "Additional Board Manager URLs":
-     ```
-     https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-     ```
-   - Vào `Tools` → `Board` → `Boards Manager`
-   - Tìm "esp32" và cài đặt
+#### Bước 2: Cài đặt thư viện
+1. Sketch → Include Library → Manage Libraries
+2. Tìm và cài đặt:
+   - `Firebase ESP32 Client` (bởi Mobizt)
+   - `ESP32Servo` (bởi Kevin Harrington)
 
-3. **Cài đặt thư viện cần thiết**
-   - Vào `Tools` → `Manage Libraries`
-   - Tìm và cài đặt:
-     - `ArduinoJson` (bởi Benoit Blanchon)
-     - `WebServer` (đã có sẵn trong ESP32)
+#### Bước 3: Cấu hình code ESP32
+1. Mở file `esp32_smarthome.ino`
+2. Cập nhật thông tin WiFi:
+   ```cpp
+   const char* ssid = "TEN_WIFI_CUA_BAN";
+   const char* password = "MAT_KHAU_WIFI";
+   ```
+3. Cập nhật Firebase credentials (đã có sẵn trong code)
 
-4. **Nạp code vào ESP32**
-   - Mở file `esp32_smarthome.ino`
-   - Cấu hình WiFi (xem phần [Cấu hình](#cấu-hình))
-   - Chọn board: `Tools` → `Board` → `ESP32 Arduino` → `ESP32 Dev Module`
-   - Chọn cổng COM: `Tools` → `Port`
-   - Nhấn `Upload`
+#### Bước 4: Nạp code vào ESP32
+1. Kết nối ESP32 với máy tính qua USB
+2. Tools → Board → Chọn "ESP32 Dev Module"
+3. Tools → Port → Chọn cổng COM của ESP32
+4. Click "Upload" (mũi tên bên phải)
 
-### 2. Kết nối Phần cứng
+### 2. Cài đặt Python Face Recognition
 
+#### Bước 1: Cài đặt Python
+1. Tải và cài đặt [Python 3.7+](https://www.python.org/downloads/)
+2. Đảm bảo chọn "Add Python to PATH" khi cài đặt
+
+#### Bước 2: Cài đặt thư viện
+Mở Terminal/Command Prompt và chạy:
+```bash
+pip install opencv-python face-recognition firebase-admin numpy
 ```
-ESP32          →    Thiết bị
-─────────────────────────────────
-GPIO 18        →    Còi (Buzzer)
-GPIO 19        →    Đèn LED (với điện trở 220Ω)
-A0 (ADC)       →    Cảm biến khí gas (MQ-2)
-GND            →    GND chung
-3.3V hoặc 5V   →    VCC (tùy thiết bị)
+
+**Lưu ý**: `face-recognition` có thể cần cài đặt thêm dependencies trên Windows:
+- Tải [Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- Hoặc cài đặt từ [pre-built wheels](https://github.com/ageitgey/face_recognition/issues/175)
+
+#### Bước 3: Cấu hình Firebase
+1. Đổi tên file `smarthome-iot-2d485-firebase-adminsdk-fbsvc-2562115f7a.json` thành `serviceAccountKey.json`
+2. Đặt file vào cùng thư mục với `nhandienkhuonmat.py`
+3. Tạo thư mục `images/` và đặt ảnh khuôn mặt vào (ví dụ: `admin.jpg`, `admin_1.jpg`, `admin_2.jpg`)
+
+#### Bước 4: Chạy script
+```bash
+python nhandienkhuonmat.py
 ```
 
-**Lưu ý**: 
-- Cảm biến MQ-2 cần nguồn 5V, nhưng ESP32 chỉ cung cấp 3.3V. Có thể cần module chuyển đổi hoặc nguồn ngoài.
-- Đèn LED cần điện trở hạn dòng 220Ω-330Ω.
+### 3. Cài đặt Web Dashboard
 
-### 3. Cài đặt Web Interface
+#### Bước 1: Mở web dashboard
+1. Mở file `index.html` bằng trình duyệt web
+2. Hoặc sử dụng local server:
+   ```bash
+   # Python
+   python -m http.server 8000
+   
+   # Node.js
+   npx http-server
+   ```
+3. Truy cập: `http://localhost:8000`
 
-1. **Mở file web**
-   - Mở file `index.html` trong trình duyệt
-   - Hoặc sử dụng web server local (XAMPP, Live Server, etc.)
-
-2. **Cấu hình IP ESP32**
-   - Mở file `app.js`
-   - Tìm dòng: `const ESP32_IP = '192.168.1.100';`
-   - Thay đổi IP thành IP của ESP32 (xem Serial Monitor sau khi nạp code)
-
-## 🚀 Sử dụng
-
-### Khởi động hệ thống
-
-1. **Bật ESP32**
-   - Kết nối ESP32 với máy tính qua USB
-   - Mở Serial Monitor (115200 baud) để xem IP address
-   - Ghi nhớ IP address (ví dụ: 192.168.1.100)
-
-2. **Mở giao diện web**
-   - Mở file `index.html` trong trình duyệt
-   - Cập nhật IP trong `app.js` nếu cần
-
-3. **Kiểm tra kết nối**
-   - Xem chỉ báo trạng thái ở góc trên bên phải
-   - Nếu hiển thị "Đã kết nối" (màu xanh) là thành công
-
-### Điều khiển thiết bị
-
-- **Còi**: Nhấn nút "Bật Còi" hoặc "Tắt Còi"
-- **Đèn**: 
-  - Nhấn nút "Bật Đèn" hoặc "Tắt Đèn"
-  - Điều chỉnh độ sáng bằng thanh trượt
-
-### Giám sát cảm biến
-
-- Giá trị gas được hiển thị real-time
-- Màu sắc thanh tiến trình thay đổi theo mức độ:
-  - **Xanh lá**: Bình thường (0-300 PPM)
-  - **Vàng**: Cảnh báo (300-1000 PPM)
-  - **Đỏ**: Nguy hiểm (>1000 PPM)
+#### Bước 2: Cấu hình Firebase (đã có sẵn)
+- Firebase config đã được cấu hình trong `index.html`
+- Không cần thay đổi gì nếu sử dụng cùng Firebase project
 
 ## ⚙️ Cấu hình
 
-### Cấu hình WiFi trong ESP32
+### Cấu hình ESP32
 
-Mở file `esp32_smarthome.ino` và thay đổi:
-
+#### Ngưỡng cảm biến gas
 ```cpp
-const char* ssid = "TEN_WIFI_CUA_BAN";
-const char* password = "MAT_KHAU_WIFI";
+const int GAS_HIGH_THRESHOLD = 1000;  // Ngưỡng báo động
+const int GAS_LOW_THRESHOLD = 900;    // Ngưỡng tắt báo động (hysteresis)
 ```
 
-### Cấu hình IP trong Web
+#### Chân GPIO
+```cpp
+const int gasPin = 34;           // Cảm biến khí gas
+const int lightSensorPin = 35;   // Cảm biến ánh sáng
+const int mainDoorPin = 13;      // Cửa chính (Servo)
+const int window1Pin = 25;       // Cửa sổ 1 (Servo)
+const int window2Pin = 26;       // Cửa sổ 2 (Servo)
+const int buzzPin = 12;          // Còi báo động
+const int alertLedPin = 14;      // Đèn báo động
+const int smartLedPin = 27;      // Đèn thông minh
+```
 
-Mở file `app.js` và thay đổi:
+### Cấu hình Python Face Recognition
 
+#### Tham số độ chính xác
+```python
+FACE_TOLERANCE = 0.35                    # Độ nghiêm ngặt (càng thấp càng chính xác)
+FACE_DISTANCE_THRESHOLD = 0.35            # Ngưỡng khoảng cách
+REQUIRED_CONSECUTIVE_MATCHES = 8          # Số frame liên tiếp cần nhận diện đúng
+```
+
+#### Đường dẫn ảnh
+```python
+IMAGE_PATH = "images/admin.jpg"           # Ảnh khuôn mặt chủ nhà
+KEY_PATH = "serviceAccountKey.json"      # Firebase Admin SDK key
+```
+
+### Cấu hình Web Dashboard
+
+#### Tham số nhận diện khuôn mặt (Web)
 ```javascript
-const ESP32_IP = '192.168.1.100'; // IP của ESP32
+const FACE_TOLERANCE = 0.35;
+const FACE_DISTANCE_THRESHOLD = 0.35;
+const REQUIRED_CONSECUTIVE_MATCHES = 8;
 ```
 
-### Cấu hình chân GPIO (nếu cần)
-
-Trong file `esp32_smarthome.ino`:
-
-```cpp
-#define GAS_SENSOR_PIN A0      // Chân cảm biến gas
-#define BUZZER_PIN 18          // Chân còi
-#define LIGHT_PIN 19           // Chân đèn
+#### Timeout kết nối
+```javascript
+const DATA_TIMEOUT = 3000;  // 3 giây không có dữ liệu = mất kết nối
 ```
 
-## 📡 API Endpoints
+## 📖 Sử dụng
 
-### GET /api/data
-Lấy dữ liệu từ tất cả cảm biến và thiết bị.
+### Web Dashboard
 
-**Response:**
-```json
-{
-  "gas": 150,
-  "buzzer": false,
-  "light": true,
-  "brightness": 75,
-  "timestamp": 12345
-}
+1. **Theo dõi cảm biến khí gas**
+   - Giá trị gas hiển thị real-time
+   - Màu sắc thay đổi theo mức độ nguy hiểm:
+     - Xanh lá: An toàn (< 300)
+     - Vàng: Cảnh báo (300-1000)
+     - Đỏ: Nguy hiểm (> 1000)
+
+2. **Điều khiển đèn thông minh**
+   - Toggle "Tự động" để bật chế độ tự động
+   - Hoặc dùng nút "Bật/Tắt" ở chế độ thủ công
+
+3. **AI Face Unlock (Web)**
+   - Click "Bật Camera" để bật webcam
+   - Click "Train Khuôn Mặt" và chọn ảnh để train
+   - Hệ thống tự động nhận diện và mở cửa khi đủ 8 frame liên tiếp
+
+4. **Xem nhật ký**
+   - Tất cả sự kiện được ghi lại trong phần "Nhật ký hoạt động"
+   - Click "Xóa nhật ký" để xóa log
+
+### Python Face Recognition
+
+1. **Chuẩn bị ảnh**
+   - Đặt ảnh khuôn mặt vào thư mục `images/`
+   - Tên file: `admin.jpg`, `admin_1.jpg`, `admin_2.jpg`, ...
+   - Hỗ trợ nhiều ảnh để tăng độ chính xác
+
+2. **Chạy script**
+   ```bash
+   python nhandienkhuonmat.py
+   ```
+
+3. **Nhận diện**
+   - Webcam sẽ tự động bật
+   - Khi nhận diện đúng 8 frame liên tiếp → Tự động mở cửa
+   - Cửa sẽ tự động đóng sau 5 giây
+
+## 🛠️ Công nghệ sử dụng
+
+### Frontend
+- **HTML5**: Cấu trúc trang web
+- **CSS3**: Styling với glassmorphism, animations, responsive design
+- **JavaScript (ES6+)**: Logic xử lý, Firebase integration
+- **Face-api.js**: Nhận diện khuôn mặt trên trình duyệt
+
+### Backend
+- **Arduino C++**: Code cho ESP32
+- **Python 3**: Script nhận diện khuôn mặt
+
+### Cloud & Database
+- **Firebase Realtime Database**: Đồng bộ dữ liệu real-time
+- **Firebase Admin SDK**: Xác thực từ Python script
+
+### Hardware
+- **ESP32**: Microcontroller chính
+- **MQ-2 Gas Sensor**: Cảm biến khí gas
+- **Light Sensor**: Cảm biến ánh sáng
+- **Servo Motors**: Điều khiển cửa/cửa sổ
+- **Buzzer**: Còi báo động
+- **LEDs**: Đèn báo động và đèn thông minh
+
+## 🔌 Sơ đồ kết nối phần cứng
+
+```
+ESP32 Pinout:
+┌─────────────────────────────────┐
+│  ESP32                          │
+│                                 │
+│  GPIO 34 ←── MQ-2 Gas Sensor    │
+│  GPIO 35 ←── Light Sensor (DO)  │
+│                                 │
+│  GPIO 13 ──→ Servo (Cửa chính) │
+│  GPIO 25 ──→ Servo (Cửa sổ 1)   │
+│  GPIO 26 ──→ Servo (Cửa sổ 2)   │
+│  GPIO 12 ──→ Buzzer             │
+│  GPIO 14 ──→ LED Báo động        │
+│  GPIO 27 ──→ LED Thông minh      │
+│                                 │
+│  3.3V ────→ Power (Servos)     │
+│  GND ─────→ Ground              │
+└─────────────────────────────────┘
 ```
 
-### POST /api/buzzer
-Điều khiển còi.
+### Kết nối cảm biến khí gas (MQ-2)
+- **VCC** → 5V
+- **GND** → GND
+- **A0** → GPIO 34 (Analog)
 
-**Request Body:**
-```json
-{
-  "state": 1  // 1 = bật, 0 = tắt
-}
-```
+### Kết nối cảm biến ánh sáng
+- **VCC** → 3.3V
+- **GND** → GND
+- **DO** → GPIO 35 (Digital)
 
-**Response:**
-```json
-{
-  "success": true,
-  "buzzer": true
-}
-```
+### Kết nối Servo
+- **Red (VCC)** → 5V (hoặc nguồn ngoài nếu cần)
+- **Black (GND)** → GND
+- **Yellow/Orange (Signal)** → GPIO tương ứng
 
-### POST /api/light
-Điều khiển đèn.
+### Kết nối Buzzer
+- **Positive** → GPIO 12
+- **Negative** → GND
 
-**Request Body:**
-```json
-{
-  "state": 1,        // 1 = bật, 0 = tắt
-  "brightness": 80   // 0-100 (chỉ khi state = 1)
-}
-```
+### Kết nối LED
+- **Anode (+)** → GPIO tương ứng (qua resistor 220Ω)
+- **Cathode (-)** → GND
 
-**Response:**
-```json
-{
-  "success": true,
-  "light": true,
-  "brightness": 80
-}
-```
-
-## 🔍 Xử lý Sự cố
+## 🐛 Troubleshooting
 
 ### ESP32 không kết nối WiFi
-- Kiểm tra SSID và mật khẩu
-- Đảm bảo WiFi ở chế độ 2.4GHz (ESP32 không hỗ trợ 5GHz)
-- Xem Serial Monitor để biết lỗi chi tiết
+- Kiểm tra SSID và password trong code
+- Đảm bảo WiFi 2.4GHz (ESP32 không hỗ trợ 5GHz)
+- Kiểm tra khoảng cách đến router
 
-### Web không kết nối được ESP32
-- Kiểm tra IP address trong `app.js` có đúng không
-- Đảm bảo ESP32 và máy tính cùng mạng WiFi
-- Kiểm tra firewall có chặn kết nối không
-- Thử truy cập trực tiếp: `http://[IP_ESP32]/api/data`
+### ESP32 không kết nối Firebase
+- Kiểm tra Firebase Host và Auth token
+- Kiểm tra Security Rules trong Firebase Console
+- Đảm bảo ESP32 đã kết nối WiFi thành công
 
-### Cảm biến không hoạt động
-- Kiểm tra kết nối dây
-- Đảm bảo cảm biến được cấp nguồn đúng
-- Kiểm tra giá trị ADC trong Serial Monitor
+### Web dashboard không hiển thị dữ liệu
+- Kiểm tra trạng thái kết nối (chấm màu xanh/đỏ)
+- Mở Console (F12) để xem lỗi
+- Kiểm tra Firebase config trong `index.html`
 
-### Còi/Đèn không hoạt động
-- Kiểm tra kết nối GPIO
-- Kiểm tra nguồn điện
-- Thử test trực tiếp bằng code đơn giản
+### Python face recognition không chạy
+- Kiểm tra webcam có hoạt động không
+- Đảm bảo đã cài đặt đầy đủ thư viện
+- Kiểm tra đường dẫn ảnh và Firebase key
+- Trên Windows, có thể cần cài Visual C++ Build Tools
+
+### Face recognition không chính xác
+- Train nhiều ảnh với góc độ khác nhau
+- Đảm bảo ánh sáng đủ khi train và nhận diện
+- Điều chỉnh `FACE_TOLERANCE` và `FACE_DISTANCE_THRESHOLD` nếu cần
+
+### Cửa không mở khi nhận diện
+- Kiểm tra ESP32 có nhận được lệnh từ Firebase không
+- Kiểm tra Servo có được cấp nguồn đủ không
+- Xem Serial Monitor của ESP32 để debug
 
 ## 📝 Ghi chú
 
-- Hệ thống sử dụng HTTP, không phải HTTPS (phù hợp cho mạng nội bộ)
-- Để sử dụng từ xa, cần cấu hình port forwarding hoặc sử dụng dịch vụ như ngrok
-- Cảm biến MQ-2 cần thời gian làm nóng (warm-up) khoảng 1-2 phút
-- Giá trị gas được mô phỏng nếu không kết nối được ESP32 (để test giao diện)
+- **Hysteresis**: Hệ thống sử dụng hysteresis (900-1000) để tránh dao động khi giá trị gas ở gần ngưỡng
+- **Cooldown**: Có cơ chế cooldown để tránh spam lệnh
+- **Non-blocking**: ESP32 code được tối ưu để không block, đảm bảo phản hồi nhanh
+- **Real-time**: Tất cả dữ liệu được đồng bộ real-time qua Firebase
 
 ## 📄 License
 
-Dự án này được tạo cho mục đích giáo dục và học tập.
+Dự án này được phát triển cho mục đích giáo dục và nghiên cứu.
 
 ## 👨‍💻 Tác giả
 
-Tạo bởi AI Assistant cho dự án IoT SmartHome với ESP32.
+Phát triển bởi SmartHome IoT Team
 
 ---
 
-**Chúc bạn thành công với dự án SmartHome! 🎉**
-
+**Lưu ý**: Đảm bảo thay đổi thông tin WiFi và Firebase credentials trước khi sử dụng!
