@@ -11,6 +11,7 @@ const deviceState = {
     lastAIOpen: null
 };
 
+
 // Face Recognition State
 const faceRecognitionState = {
     isModelLoaded: false,
@@ -24,13 +25,16 @@ const faceRecognitionState = {
     lastMatchTime: 0
 };
 
+
 // Tham số độ chính xác (đồng bộ với Python)
 const FACE_TOLERANCE = 0.35; // Giảm từ 0.5 xuống 0.35 để nghiêm ngặt hơn
 const FACE_DISTANCE_THRESHOLD = 0.35; // Ngưỡng khoảng cách tối đa
 const REQUIRED_CONSECUTIVE_MATCHES = 8; // Phải nhận diện đúng 8 frame liên tiếp mới mở cửa
 
+
 // Firebase database reference
 const dbRef = database.ref('smarthome');
+
 
 // Khởi tạo ứng dụng
 document.addEventListener('DOMContentLoaded', async () => {
@@ -40,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeFaceRecognition();
     addLog('Hệ thống đã khởi động', 'success');
 });
+
 
 // Khởi tạo giao diện
 function initializeUI() {
@@ -53,6 +58,7 @@ function initializeUI() {
     updateConnectionStatus(false);
 }
 
+
 // Thiết lập event listeners
 function setupEventListeners() {
     // Smart Light Auto/Manual Toggle
@@ -62,19 +68,23 @@ function setupEventListeners() {
         controlSmartLightMode(isAuto);
     });
 
+
     // Smart Light Manual Controls
     document.getElementById('smart-light-on').addEventListener('click', () => {
         controlSmartLight(true);
     });
 
+
     document.getElementById('smart-light-off').addEventListener('click', () => {
         controlSmartLight(false);
     });
+
 
     // AI Test Door Button
     document.getElementById('test-ai-door').addEventListener('click', () => {
         testAIDoor();
     });
+
 
     // Face Recognition Web Controls
     document.getElementById('start-camera').addEventListener('click', startCamera);
@@ -83,7 +93,7 @@ function setupEventListeners() {
         document.getElementById('face-image-input').click();
     });
     document.getElementById('face-image-input').addEventListener('change', handleTrainFace);
-    
+   
     // Clear logs button
     document.getElementById('clear-logs').addEventListener('click', () => {
         const logContainer = document.getElementById('log-container');
@@ -92,20 +102,22 @@ function setupEventListeners() {
     });
 }
 
+
 // Bắt đầu lắng nghe dữ liệu từ Firebase (Real-time)
 let lastDataTimestamp = 0;
 let connectionCheckInterval = null;
 const DATA_TIMEOUT = 3000; // 3 giây không có dữ liệu mới = mất kết nối (giảm từ 5s)
 
+
 function startFirebaseListener() {
     // Kiểm tra kết nối Firebase trước
     checkFirebaseConnection();
-    
+   
     // Kiểm tra timeout định kỳ (mỗi 500ms để phản hồi cực nhanh)
     if (connectionCheckInterval) {
         clearInterval(connectionCheckInterval);
     }
-    
+   
     connectionCheckInterval = setInterval(() => {
         const now = Date.now();
         if (lastDataTimestamp > 0 && (now - lastDataTimestamp) > DATA_TIMEOUT) {
@@ -114,7 +126,7 @@ function startFirebaseListener() {
             lastDataTimestamp = 0; // Reset để tránh spam log
         }
     }, 500); // Kiểm tra mỗi 500ms để phản hồi nhanh
-    
+   
     // Kiểm tra dữ liệu ngay khi load trang (không đợi)
     dbRef.child('data').once('value', (snapshot) => {
         const data = snapshot.val();
@@ -122,7 +134,7 @@ function startFirebaseListener() {
             lastDataTimestamp = Date.now();
             updateConnectionStatus(true);
             deviceState.connected = true;
-            
+           
             // Cập nhật dữ liệu ngay
             deviceState.gasValue = data.gas || 0;
             deviceState.lightSensor = data.light_sensor || 0;
@@ -137,18 +149,19 @@ function startFirebaseListener() {
         updateConnectionStatus(false);
         deviceState.connected = false;
     });
-    
+   
     // Lắng nghe real-time để cập nhật ngay khi có thay đổi
     dbRef.child('data').on('value', (snapshot) => {
         const data = snapshot.val();
-        
+       
         if (data && (data.gas !== undefined || data.light_sensor !== undefined)) {
             // Cập nhật timestamp ngay khi nhận được dữ liệu hợp lệ
             lastDataTimestamp = Date.now();
-            
+           
             deviceState.gasValue = data.gas || 0;
             deviceState.lightSensor = data.light_sensor || 0;
             deviceState.connected = true;
+
 
             // Cập nhật giao diện ngay lập tức
             updateGasDisplay(deviceState.gasValue);
@@ -169,6 +182,7 @@ function startFirebaseListener() {
         addLog('Lỗi kết nối Firebase: ' + error.message, 'error');
     });
 
+
     // Lắng nghe trạng thái đèn thông minh
     dbRef.child('status/smart_light').on('value', (snapshot) => {
         if (snapshot.exists()) {
@@ -176,6 +190,7 @@ function startFirebaseListener() {
             updateSmartLightDisplay(deviceState.smartLightOn, deviceState.smartLightAutoMode);
         }
     });
+
 
     // Lắng nghe lệnh AI door (để hiển thị trạng thái)
     dbRef.child('commands/ai_door').on('value', (snapshot) => {
@@ -186,7 +201,7 @@ function startFirebaseListener() {
                 deviceState.lastAIOpen = new Date();
                 updateAIDisplay(true, deviceState.lastAIOpen);
                 addLog('🤖 AI đã nhận diện và mở cửa!', 'success');
-                
+               
                 // Reset sau 5 giây
                 setTimeout(() => {
                     deviceState.aiDoorOpen = false;
@@ -199,21 +214,23 @@ function startFirebaseListener() {
         }
     });
 
+
     // Tính toán trạng thái các thiết bị dựa trên gas value
     dbRef.child('data/gas').on('value', (snapshot) => {
         if (snapshot.exists()) {
             const gasValue = snapshot.val();
             const isDanger = gasValue > 1000;
-            
+           
             // Cập nhật trạng thái báo động
             deviceState.alertLedOn = isDanger;
             deviceState.doorOpen = isDanger; // Cửa mở khi có gas
-            
+           
             updateAlertLedDisplay(deviceState.alertLedOn);
             updateDoorDisplay(deviceState.doorOpen);
         }
     });
 }
+
 
 // Kiểm tra kết nối Firebase
 function checkFirebaseConnection() {
@@ -236,17 +253,21 @@ function checkFirebaseConnection() {
     }
 }
 
+
 // Cập nhật hiển thị cảm biến gas
 function updateGasDisplay(value) {
     const gasValueEl = document.getElementById('gas-value');
     const gasProgressEl = document.getElementById('gas-progress');
     const gasStatusEl = document.getElementById('gas-status');
 
+
     gasValueEl.textContent = value;
+
 
     // Tính phần trăm (max là 2000 PPM)
     const percentage = Math.min((value / 2000) * 100, 100);
     gasProgressEl.style.width = percentage + '%';
+
 
     // Cập nhật trạng thái và màu sắc
     if (value < 1000) {
@@ -261,12 +282,14 @@ function updateGasDisplay(value) {
     }
 }
 
+
 // Cập nhật hiển thị cảm biến ánh sáng
 function updateLightSensorDisplay(value) {
     const lightSensorStatusEl = document.getElementById('light-sensor-status');
     const lightSensorTextEl = document.getElementById('light-sensor-text');
     const sunIcon = document.getElementById('sun-icon');
     const moonIcon = document.getElementById('moon-icon');
+
 
     // value = 0 là Sáng, value = 1 (HIGH) là Tối
     if (value === 0 || value === false) {
@@ -284,10 +307,12 @@ function updateLightSensorDisplay(value) {
     }
 }
 
+
 // Cập nhật hiển thị đèn báo động
 function updateAlertLedDisplay(isOn) {
     const alertLedStatusEl = document.getElementById('alert-led-status');
     const alertLedIconEl = document.getElementById('alert-led-icon');
+
 
     if (isOn) {
         alertLedStatusEl.textContent = 'Đang bật';
@@ -300,6 +325,7 @@ function updateAlertLedDisplay(isOn) {
     }
 }
 
+
 // Cập nhật hiển thị đèn thông minh
 function updateSmartLightDisplay(isOn, isAuto) {
     const smartLightStatusEl = document.getElementById('smart-light-status');
@@ -308,9 +334,11 @@ function updateSmartLightDisplay(isOn, isAuto) {
     const modeText = document.getElementById('mode-text');
     const manualControl = document.getElementById('manual-control');
 
+
     deviceState.smartLightAutoMode = isAuto;
     autoModeToggle.checked = isAuto;
     modeText.textContent = isAuto ? 'Tự động' : 'Thủ công';
+
 
     // Hiển thị/ẩn nút điều khiển thủ công
     if (isAuto) {
@@ -318,6 +346,7 @@ function updateSmartLightDisplay(isOn, isAuto) {
     } else {
         manualControl.style.display = 'flex';
     }
+
 
     if (isOn) {
         smartLightStatusEl.textContent = isAuto ? 'Bật (Tự động)' : 'Bật (Thủ công)';
@@ -330,6 +359,7 @@ function updateSmartLightDisplay(isOn, isAuto) {
     }
 }
 
+
 // Cập nhật hiển thị AI Face Unlock
 function updateAIDisplay(isActive, lastOpenTime) {
     const aiStatusEl = document.getElementById('ai-status');
@@ -337,12 +367,13 @@ function updateAIDisplay(isActive, lastOpenTime) {
     const aiLastOpenEl = document.getElementById('ai-last-open');
     const aiIconEl = document.getElementById('ai-icon');
 
+
     if (isActive) {
         aiStatusEl.textContent = 'Đang mở cửa';
         aiStatusEl.className = 'card-status active';
         aiStatusTextEl.textContent = 'Đã nhận diện khuôn mặt';
         aiIconEl.classList.add('active');
-        
+       
         if (lastOpenTime) {
             const timeStr = lastOpenTime.toLocaleTimeString('vi-VN');
             aiLastOpenEl.textContent = timeStr;
@@ -352,7 +383,7 @@ function updateAIDisplay(isActive, lastOpenTime) {
         aiStatusEl.className = 'card-status';
         aiStatusTextEl.textContent = 'Đang chờ nhận diện';
         aiIconEl.classList.remove('active');
-        
+       
         if (lastOpenTime) {
             const timeStr = lastOpenTime.toLocaleTimeString('vi-VN');
             aiLastOpenEl.textContent = timeStr;
@@ -362,10 +393,12 @@ function updateAIDisplay(isActive, lastOpenTime) {
     }
 }
 
+
 // Cập nhật hiển thị cửa
 function updateDoorDisplay(isOpen) {
     const doorStatusEl = document.getElementById('door-status');
     const doorIconEl = document.getElementById('door-icon');
+
 
     if (isOpen) {
         doorStatusEl.textContent = 'Mở';
@@ -378,23 +411,25 @@ function updateDoorDisplay(isOpen) {
     }
 }
 
+
 // ========== FACE RECOGNITION WEB FUNCTIONS ==========
+
 
 // Khởi tạo Face Recognition
 async function initializeFaceRecognition() {
     try {
         addLog('Đang tải Face Recognition models...', '');
-        
+       
         // Load face-api models từ CDN
         const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-        
+       
         faceRecognitionState.isModelLoaded = true;
         faceRecognitionState.video = document.getElementById('video');
         faceRecognitionState.canvas = document.getElementById('canvas');
-        
+       
         updateAIWebDisplay('Sẵn sàng', faceRecognitionState.knownFaces.length);
         addLog('✅ Face Recognition models đã tải xong', 'success');
     } catch (error) {
@@ -403,26 +438,27 @@ async function initializeFaceRecognition() {
     }
 }
 
+
 // Bật camera
 async function startCamera() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                width: 640, 
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: 640,
                 height: 480,
                 facingMode: 'user' // Front camera
-            } 
+            }
         });
-        
+       
         faceRecognitionState.video.srcObject = stream;
         faceRecognitionState.isCameraActive = true;
-        
+       
         document.getElementById('start-camera').style.display = 'none';
         document.getElementById('stop-camera').style.display = 'inline-block';
-        
+       
         updateAIWebDisplay('Đang quét...', faceRecognitionState.knownFaces.length);
         addLog('📷 Camera đã bật', 'success');
-        
+       
         // Bắt đầu detect faces
         startFaceDetection();
     } catch (error) {
@@ -431,6 +467,7 @@ async function startCamera() {
     }
 }
 
+
 // Tắt camera
 function stopCamera() {
     if (faceRecognitionState.video.srcObject) {
@@ -438,92 +475,94 @@ function stopCamera() {
         tracks.forEach(track => track.stop());
         faceRecognitionState.video.srcObject = null;
     }
-    
+   
     faceRecognitionState.isCameraActive = false;
-    
+   
     if (faceRecognitionState.detectionInterval) {
         clearInterval(faceRecognitionState.detectionInterval);
         faceRecognitionState.detectionInterval = null;
     }
-    
+   
     // Reset counter khi tắt camera
     faceRecognitionState.consecutiveMatches = 0;
-    
+   
     // Clear canvas
     const ctx = faceRecognitionState.canvas.getContext('2d');
     ctx.clearRect(0, 0, faceRecognitionState.canvas.width, faceRecognitionState.canvas.height);
-    
+   
     document.getElementById('start-camera').style.display = 'inline-block';
     document.getElementById('stop-camera').style.display = 'none';
-    
+   
     updateAIWebDisplay('Đã tắt', faceRecognitionState.knownFaces.length);
     addLog('📷 Camera đã tắt', '');
 }
 
+
 // Bắt đầu detect faces
 function startFaceDetection() {
     if (!faceRecognitionState.isModelLoaded || !faceRecognitionState.isCameraActive) return;
-    
+   
     faceRecognitionState.detectionInterval = setInterval(async () => {
         await detectFaces();
     }, 500); // Detect mỗi 500ms
 }
 
+
 // Detect và nhận diện khuôn mặt
 async function detectFaces() {
     if (!faceRecognitionState.video || !faceRecognitionState.isModelLoaded) return;
-    
+   
     const video = faceRecognitionState.video;
     const canvas = faceRecognitionState.canvas;
-    
+   
     // Set canvas size
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
+   
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
+   
     // Detect faces
     const detections = await faceapi
         .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
         .withFaceDescriptors();
-    
+   
     if (detections.length === 0) {
         return;
     }
-    
+   
     // Draw boxes và check recognition
     let currentFrameHasMatch = false;
-    
+   
     // Xử lý từng detection (không dùng async trong forEach)
     for (const detection of detections) {
         const box = detection.detection.box;
-        
+       
         // Check if face is recognized
         if (faceRecognitionState.knownFaces.length > 0) {
             const faceMatcher = new faceapi.FaceMatcher(faceRecognitionState.knownFaces, FACE_TOLERANCE);
             const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-            
+           
             // Tính confidence (1 - distance)
             const confidence = 1 - bestMatch.distance;
-            
+           
             // CHỈ NHẬN DIỆN NẾU:
             // 1. Match label !== 'unknown' (tolerance check)
             // 2. Distance < threshold (nghiêm ngặt hơn)
             const isRecognized = bestMatch.label !== 'unknown' && bestMatch.distance < FACE_DISTANCE_THRESHOLD;
-            
+           
             // Draw box với màu dựa trên độ chính xác
             ctx.strokeStyle = isRecognized ? '#10b981' : '#ef4444';
             ctx.lineWidth = isRecognized ? 3 : 2;
             ctx.strokeRect(box.x, box.y, box.width, box.height);
-            
+           
             // Draw label với confidence
             ctx.fillStyle = isRecognized ? '#10b981' : '#ef4444';
             ctx.fillRect(box.x, box.y - 50, box.width, 50);
             ctx.fillStyle = 'white';
             ctx.font = '14px Arial';
-            
+           
             if (isRecognized) {
                 ctx.fillText(
                     `✅ ${bestMatch.label} (${Math.round(confidence * 100)}%)`,
@@ -557,12 +596,12 @@ async function detectFaces() {
             ctx.fillText('⚠️ Chưa train', box.x + 5, box.y - 5);
         }
     }
-    
+   
     // Xử lý logic đếm frame liên tiếp (đồng bộ với Python)
     if (currentFrameHasMatch) {
         faceRecognitionState.consecutiveMatches++;
         faceRecognitionState.lastMatchTime = Date.now();
-        
+       
         if (faceRecognitionState.consecutiveMatches >= REQUIRED_CONSECUTIVE_MATCHES) {
             // Đã nhận diện đúng đủ số frame liên tiếp
             const now = Date.now();
@@ -584,23 +623,24 @@ async function detectFaces() {
     }
 }
 
+
 // Train khuôn mặt từ ảnh (hỗ trợ train nhiều ảnh như Python)
 async function handleTrainFace(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    
+   
     try {
         const name = prompt('Nhập tên cho khuôn mặt này:', 'Admin');
         if (!name) {
             event.target.value = '';
             return;
         }
-        
+       
         addLog(`Đang train ${files.length} ảnh cho ${name}...`, '');
-        
+       
         let successCount = 0;
         const descriptors = [];
-        
+       
         // Xử lý từng file (hỗ trợ chọn nhiều ảnh)
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -610,36 +650,36 @@ async function handleTrainFace(event) {
                     .detectAllFaces(image, new faceapi.TinyFaceDetectorOptions())
                     .withFaceLandmarks()
                     .withFaceDescriptors();
-                
+               
                 if (detections.length === 0) {
                     addLog(`⚠️ Không tìm thấy khuôn mặt trong ${file.name}`, 'warning');
                     continue;
                 }
-                
+               
                 // Thêm tất cả khuôn mặt tìm được (giống Python)
                 detections.forEach(detection => {
                     descriptors.push(detection.descriptor);
                     successCount++;
                 });
-                
+               
                 addLog(`✓ Đã load: ${file.name} (${detections.length} khuôn mặt)`, 'success');
             } catch (error) {
                 console.error(`Lỗi khi xử lý ${file.name}:`, error);
                 addLog(`✗ Lỗi khi load ${file.name}`, 'error');
             }
         }
-        
+       
         if (descriptors.length > 0) {
             // Tạo LabeledFaceDescriptors với tất cả descriptors (giống Python)
             const labeledFaceDescriptor = new faceapi.LabeledFaceDescriptors(name, descriptors);
             faceRecognitionState.knownFaces.push(labeledFaceDescriptor);
-            
+           
             updateAIWebDisplay('Đã train', faceRecognitionState.knownFaces.length);
             addLog(`✅ Đã train ${successCount} khuôn mặt cho ${name}`, 'success');
         } else {
             addLog('❌ Không có khuôn mặt nào được train', 'error');
         }
-        
+       
         // Reset input
         event.target.value = '';
     } catch (error) {
@@ -648,27 +688,24 @@ async function handleTrainFace(event) {
     }
 }
 
-// Mở cửa khi nhận diện được (đồng bộ với Python)
+
+// Mở cửa khi nhận diện được
 async function unlockDoor() {
     try {
+        // CHỈ GỬI LỆNH MỞ (TRUE)
+        // Việc đóng cửa và reset về false sẽ do ESP32 tự xử lý (để tránh xung đột)
         await database.ref('smarthome/commands/ai_door').set(true);
+       
         addLog(`✅ XÁC NHẬN! ${REQUIRED_CONSECUTIVE_MATCHES} frame liên tiếp - CHÀO MỪNG ADMIN!`, 'success');
         updateAIWebDisplay('Đã nhận diện!', faceRecognitionState.knownFaces.length);
-        
-        // Reset sau 5 giây (giống Python)
-        setTimeout(async () => {
-            try {
-                await database.ref('smarthome/commands/ai_door').set(false);
-                addLog('Reset trạng thái mở cửa. Sẵn sàng nhận diện lần tiếp theo.', '');
-            } catch (error) {
-                console.error('Lỗi reset AI door:', error);
-            }
-        }, 5000);
+       
+        // Không cần setTimeout set(false) ở đây nữa vì ESP32 đã có code tự reset sau 5s
     } catch (error) {
         console.error('Lỗi unlock door:', error);
         addLog('❌ Lỗi khi mở cửa', 'error');
     }
 }
+
 
 // Cập nhật hiển thị AI Web (đồng bộ với Python)
 function updateAIWebDisplay(status, trainedCount) {
@@ -676,22 +713,22 @@ function updateAIWebDisplay(status, trainedCount) {
     const statusTextEl = document.getElementById('face-recognition-status');
     const countEl = document.getElementById('trained-faces-count');
     const progressEl = document.getElementById('matches-progress');
-    
+   
     statusEl.textContent = status;
     statusTextEl.textContent = status;
-    
+   
     // Đếm tổng số descriptors (giống Python)
     let totalDescriptors = 0;
     faceRecognitionState.knownFaces.forEach(face => {
         totalDescriptors += face.descriptors.length;
     });
     countEl.textContent = totalDescriptors || trainedCount;
-    
+   
     // Cập nhật tiến trình nhận diện
     if (progressEl) {
         progressEl.textContent = `${faceRecognitionState.consecutiveMatches}/${REQUIRED_CONSECUTIVE_MATCHES}`;
     }
-    
+   
     if (status.includes('Đã nhận diện')) {
         statusEl.className = 'card-status active';
     } else if (status.includes('Đang quét') || status.includes('Đang xác nhận')) {
@@ -700,6 +737,7 @@ function updateAIWebDisplay(status, trainedCount) {
         statusEl.className = 'card-status';
     }
 }
+
 
 // Điều khiển chế độ đèn thông minh (Auto/Manual)
 async function controlSmartLightMode(isAuto) {
@@ -714,12 +752,14 @@ async function controlSmartLightMode(isAuto) {
     }
 }
 
+
 // Điều khiển đèn thông minh (chỉ khi Manual mode)
 async function controlSmartLight(on) {
     if (deviceState.smartLightAutoMode) {
         addLog('Vui lòng tắt chế độ tự động để điều khiển thủ công', 'warning');
         return;
     }
+
 
     try {
         await database.ref('smarthome/commands/smart_light').set(on);
@@ -732,30 +772,27 @@ async function controlSmartLight(on) {
     }
 }
 
+
 // Test mở cửa bằng AI (gửi lệnh thủ công)
 async function testAIDoor() {
     try {
+        // CHỈ GỬI LỆNH MỞ
         await database.ref('smarthome/commands/ai_door').set(true);
         addLog('🧪 Đã gửi lệnh test mở cửa AI', 'success');
-        
-        // Reset sau 5 giây
-        setTimeout(async () => {
-            try {
-                await database.ref('smarthome/commands/ai_door').set(false);
-            } catch (error) {
-                console.error('Lỗi reset AI door:', error);
-            }
-        }, 5000);
+       
+        // Không cần setTimeout set(false) ở đây
     } catch (error) {
         console.error('Lỗi Firebase:', error);
         addLog('Lỗi khi test mở cửa AI', 'error');
     }
 }
 
+
 // Cập nhật trạng thái kết nối
 function updateConnectionStatus(connected) {
     const statusDot = document.getElementById('connection-status');
     const statusText = document.getElementById('connection-text');
+
 
     if (connected) {
         statusDot.className = 'status-dot online';
@@ -766,29 +803,36 @@ function updateConnectionStatus(connected) {
     }
 }
 
+
 // Thêm log vào nhật ký
 function addLog(message, type = '') {
     const logContainer = document.getElementById('log-container');
     const logItem = document.createElement('div');
     logItem.className = `log-item ${type}`;
-    
+   
     const timestamp = new Date().toLocaleTimeString('vi-VN');
     logItem.textContent = `[${timestamp}] ${message}`;
-    
+   
     logContainer.insertBefore(logItem, logContainer.firstChild);
-    
+   
     // Giới hạn số lượng log
     while (logContainer.children.length > 50) {
         logContainer.removeChild(logContainer.lastChild);
     }
 }
 
+
 // Xử lý lỗi toàn cục
 window.addEventListener('error', (event) => {
     addLog(`Lỗi: ${event.message}`, 'error');
 });
 
+
 // Xử lý khi trang bị đóng
 window.addEventListener('beforeunload', () => {
     // Có thể gửi lệnh tắt tất cả thiết bị trước khi đóng
 });
+
+
+
+
